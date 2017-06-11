@@ -8,7 +8,7 @@ import sequtils
 import alea
 import neo
 import random/urandom, random/mersenne
-import progress
+
 
 
 type
@@ -83,17 +83,13 @@ proc train(nn: var NN, filename: string, epoch: int) =
   let
     training_data = load_csv(filename)
 
-  # echo "training"
-  # var bar = newProgressBar(total=training_data.len * epoch)
   for _ in 0 .. epoch:
     for row in training_data:
-      # bar.increment()
       var
         targets = @[0.01].cycle(nn.onodes)
         inputs  = lc[(x.parseFloat / 255.0 * 0.99) + 0.01 | (x <- row[1 .. ^1]), float]
       targets[row[0].parseInt] = 0.99
       nn.learn(inputs, targets)
-  # bar.finish()
 
 proc argmax(inp: Matrix[float]):int =
   var
@@ -126,6 +122,6 @@ proc examine(nn: NN, filename: string): seq[int] =
 
 when isMainModule:
   var nn = newNN(784, 200, 10, 0.01)
-  nn.train("data/mnist_train.csv", epoch=3)
-  let scorecard = nn.examine("data/mnist_test.csv")
+  nn.train("data/mnist_train_100.csv", epoch=10)
+  let scorecard = nn.examine("data/mnist_test_10.csv")
   echo "performance= ", scorecard.sum / scorecard.len
