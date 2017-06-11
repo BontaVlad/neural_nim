@@ -9,6 +9,8 @@ import alea
 import neo
 import random/urandom, random/mersenne
 import progress
+import input_weights
+import hidden_weights
 
 
 type
@@ -126,6 +128,10 @@ proc examine(nn: NN, filename: string): seq[int] =
 
 when isMainModule:
   var nn = newNN(784, 200, 10, 0.01)
-  nn.train("data/mnist_train.csv", epoch=3)
-  let scorecard = nn.examine("data/mnist_test.csv")
-  echo "performance= ", scorecard.sum / scorecard.len
+  nn.train("data/mnist_train_100.csv", epoch=10)
+  # let scorecard = nn.examine("data/mnist_test_10.csv")
+  # echo "performance= ", scorecard.sum / scorecard.len
+  echo who
+  # for row in nn.who.rows:
+  #   for col in row:
+  #     echo col, ","
