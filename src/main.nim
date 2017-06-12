@@ -9,8 +9,8 @@ import alea
 import neo
 import random/urandom, random/mersenne
 import progress
-import input_weights
-import hidden_weights
+# import input_weights
+# import hidden_weights
 
 
 type
@@ -126,12 +126,28 @@ proc examine(nn: NN, filename: string): seq[int] =
   return scorecard
 
 
+proc dump(fn: string, success_rate: float, w_name: string, weights: Matrix[float]) =
+  var fs = newFileStream(fn, fmWrite)
+  defer: close(fs)
+
+  if isNil(fs):
+    quit("Could not open filename $#" % fn)
+  fs.writeLine("const success_rate* = $#" % $success_rate)
+  fs.writeLine("let $#* = @[" % w_name)
+  for e in weights.data:
+    fs.writeLine("$#," % $e)
+  fs.writeLine("]")
+
+
+
+
 when isMainModule:
   var nn = newNN(784, 200, 10, 0.01)
   nn.train("data/mnist_train_100.csv", epoch=10)
-  # let scorecard = nn.examine("data/mnist_test_10.csv")
-  # echo "performance= ", scorecard.sum / scorecard.len
-  echo who
-  # for row in nn.who.rows:
-  #   for col in row:
-  #     echo col, ","
+  let
+    scorecard = nn.examine("data/mnist_test_10.csv")
+    performance = scorecard.sum / scorecard.len
+
+  echo "performance= ", performance
+  dump("src/input_weights.nim", performance, "whi", nn.wih)
+  dump("src/hidden_weights.nim", performance, "who", nn.who)
