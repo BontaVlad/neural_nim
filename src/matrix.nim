@@ -39,7 +39,7 @@ type
   Matrix*[T] = object
     numRows:   int
     numCols:   int
-    data:       seq[T]
+    data*:       seq[T]
 
 {.deprecated: [TMatrix: Matrix].}
 
