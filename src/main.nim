@@ -1,158 +1,153 @@
-import math
-import future
-import streams
-import parsecsv
-import strutils
 import sequtils
+import dom
+import colors
 
-import alea
-import random/urandom, random/mersenne
-import matrix
-import progress
-import input_weights
-import hidden_weights
+import html5_canvas
+import neural
 
-
-type
-  NN = object
-    inodes: int
-    hnodes: int
-    onodes: int
-    lr: float
-    wih: Matrix[float]
-    who: Matrix[float]
+const
+  c_width = 28
+  c_height = 28
 
 
-proc load_csv(filename: string): seq[CsvRow] =
+var
+  pos: tuple[x: int, y: int] = (0, 0)
+  canvas: Canvas
+  canvas_temp: Canvas
+  ctx: CanvasRenderingContext2D
+  ctx_temp : CanvasRenderingContext2D
+  button_pressed = false
+  img_data: seq[cuint] = @[]
+  nn = newNN(784, 200, 10, 0.01)
+  lineWidth = 25
+
+
+proc clear(e: Event) =
+  ctx.clearRect(0, 0, canvas.width.float, canvas.height.float)
+
+proc setPosition(e: Event) =
+  pos.x = e.clientX
+  pos.y = e.clientY
+
+
+proc draw(e: Event) =
+  e.preventDefault()
+  if not button_pressed: return
+
+  ctx.beginPath()
+  ctx.lineWidth = lineWidth.float
+  ctx.lineCap = RoundCap
+  ctx.strokeStyle = "red"
+  ctx.moveTo(pos.x.float, pos.y.float) # from
+  setPosition(e)
+  ctx.lineTo(pos.x.float, pos.y.float) # to
+  ctx.stroke() # draw it
+
+proc down(e: Event) =
+  e.preventDefault()
+  button_pressed = true
+  setPosition(e)
+
+proc up(e: Event) =
+  e.preventDefault()
+  button_pressed = false
+
+
+proc boundingBox(data: seq[uint8], alphaThreashold = 15, margin = 50): tuple[x, y, minX, minY, maxX, maxY, w, h: int] =
+  # code stollen from http://phrogz.net/tmp/canvas_bounding_box.html
+
+  let
+    w = canvas.width
+    h = canvas.height
   var
-    stream = newFileStream(filename, fmRead)
-    parser: CsvParser
+    minX= 100_000
+    minY= 100_000
+    maxX= -1
+    maxY= -1
+    a: uint8
 
-  result = @[]
-  if stream == nil: quit("could not open file " & filename)
-  open(parser, stream, filename)
-  while readRow(parser):
-    result.add(parser.row)
-  close(parser)
-
-
-proc expit(x: float): float =
-  result = 1 / (1+exp(-x))
-
-
-proc argmax(inp: Matrix[float]):int =
-  var
-    max_value = 0.0
-  echo inp
-  echo "----"
-  for e in 0 .. inp.rows - 1:
-    if inp[e, 0] > max_value:
-      max_value = inp[e, 0]
-      result = e
-
-
-proc newNN*(inodes, hnodes, onodes: int, lr: float): NN {.exportc.}=
-  # let
-  #   a = gaussian(mu = 0.0, sigma = pow(inodes.float, -0.5))
-  #   b = gaussian(mu = 0.0, sigma = pow(hnodes.float, -0.5))
-  # var
-  #   rng = wrap(initMersenneTwister(urandom(16)))
-
-  result.inodes = inodes
-  result.hnodes = hnodes
-  result.onodes = onodes
-  result.lr = lr
-
-  # random values sampled from a normal(Gaussian) distribution
-  # result.wih = makeMatrix(hnodes, inodes, proc(i, j: int): float64 = rng.sample(a))
-  # result.who = makeMatrix(onodes, hnodes, proc(i, j: int): float64 = rng.sample(b))
-  # result.wih = zeros[float](hnodes, inodes).map(proc(x: float): float = rng.sample(a))
-  # result.who = zeros[float](onodes, hnodes).map(proc(x: float): float = rng.sample(b))
-  result.wih = newMatrix[float](hnodes, inodes, whi)
-  result.who = newMatrix[float](onodes, hnodes, who)
+  for x in 0 .. w - 1:
+    for y in 0 .. h - 1:
+      a = data[(w*y+x)*4+3]
+      if a > alphaThreashold.uint8:
+        if x > maxX:
+          maxX = x
+        if x < minX:
+           minX = x
+        if y > maxY:
+          maxY = y
+        if y < minY:
+          minY = y
+  result.x = minX - margin
+  result.y = minY - margin
+  result.maxX = maxX
+  result.maxY = maxY
+  result.minX = minX
+  result.minY = minY
+  result.w = maxX - minX + margin * 2
+  result.h = maxY - minY + margin * 2
 
 
-proc learn(nn: var NN, inp, tar: seq[float]) =
+proc guess(e: Event) =
+  img_data = @[]
   let
-    inputs = newMatrix(1, inp.len, inp).transpose
-    targets = newMatrix(1, tar.len, tar).transpose
-    hidden_inputs = nn.wih * inputs
-    hidden_outputs = hidden_inputs.map(proc(x: float64): float64 = expit(x))
-    final_inputes = nn.who * hidden_outputs
-    final_outputs = final_inputes.map(proc(x: float64): float64 = expit(x))
-    output_errors = targets - final_outputs
-    hidden_errors = nn.who.transpose * output_errors
+    sure = dom.document.getElementById("sure").Node
+    maybe = dom.document.getElementById("maybe").Node
+    raw_data = ctx.getImageData(0, 0, canvas.width.float, canvas.height.float).data
+    bbox = boundingBox(raw_data)
+  ctx_temp.drawImage(canvas, bbox.x.float, bbox.y.float, bbox.w.float, bbox.h.float, 0, 0, c_width.float, c_height.float)
+  let data = ctx_temp.getImageData(0, 0, c_width.float, c_height.float).data
+  for i in countup(0, data.len - 1, 4):
+    img_data.add(data[i])
+  let output = nn.query(img_data)
+  sure.innerHtml = $output.sure
+  maybe.innerHtml = $output.maybe
 
-  nn.who = nn.who + nn.lr * (output_errors *. final_outputs *. (final_outputs.map(proc(x: float64): float64 = 1.0 - x))) * hidden_outputs.transpose
-  nn.wih = nn.wih + nn.lr * (hidden_errors *. hidden_outputs *. (hidden_outputs.map(proc(x: float64): float64 = 1.0 - x))) * inputs.transpose
 
-
-proc query*(nn: NN, inp: seq[float]):int {.exportc.}=
+proc correct(e: Event) =
   let
-    inputs = newMatrix(1, inp.len, inp).transpose
-    hidden_inputs = nn.wih * inputs
-    hidden_outputs = hidden_inputs.map(proc(x: float): float = expit(x))
-    final_inputes = nn.who * hidden_outputs
-  result = argmax(final_inputes.map(proc(x: float): float = expit(x)))
+    correct_input = dom.document.getElementById("correct-input").OptionElement
+    value = correct_input.value.parseInt
+  if img_data.len == 0:
+    echo "You must guess something first!"
+    return
+  nn.correct(img_data, value)
 
 
-proc train(nn: var NN, filename: string, epoch: int) =
+proc resize(e: Event) =
   let
-    training_data = load_csv(filename)
+    size = dom.window.innerWidth - 30
+  canvas.width = size
+  canvas.height = size
+  if size < 400:
+    lineWidth = 15
 
-  # echo "training"
-  var bar = newProgressBar(total=training_data.len * epoch)
-  for _ in 0 .. epoch:
-    for row in training_data:
-      bar.increment()
-      var
-        targets = @[0.01].cycle(nn.onodes)
-        inputs  = lc[(x.parseFloat / 255.0 * 0.99) + 0.01 | (x <- row[1 .. ^1]), float]
-      targets[row[0].parseInt] = 0.99
-      nn.learn(inputs, targets)
-  bar.finish()
-
-proc examine(nn: NN, filename: string): seq[int] =
-  let test_data = load_csv(filename)
-
-  var
-    scorecard: seq[int] = @[]
-
-  for row in test_data:
-    let
-      correct_label = row[0].parseInt
-      inputs  = lc[(x.parseFloat / 255.0 * 0.99) + 0.01 | (x <- row[1 .. ^1]), float]
-      label = nn.query(inputs)
-    echo "label: $# --> $#" % [$label, $correct_label]
-    if label == correct_label:
-      scorecard.add(1)
-    else:
-      scorecard.add(0)
-  return scorecard
-
-
-proc dump(fn: string, success_rate: float, w_name: string, weights: Matrix[float]) =
-  var fs = newFileStream(fn, fmWrite)
-  defer: close(fs)
-
-  if isNil(fs):
-    quit("Could not open filename $#" % fn)
-  fs.writeLine("const success_rate* = $#" % $success_rate)
-  fs.writeLine("let $#* = @[" % w_name)
-  for e in weights.data:
-    fs.writeLine("  $#," % $e)
-  fs.writeLine("]")
-
-
-
-
-when isMainModule:
-  var nn = newNN(784, 200, 10, 0.01)
-  # nn.train("data/mnist_train.csv", epoch=10)
+proc main(event: Event) =
   let
-    scorecard = nn.examine("data/mnist_test.csv")
-    performance = scorecard.sum / scorecard.len
+    clear_btn = dom.document.getElementById("clear-btn").Node
+    guess_btn = dom.document.getElementById("guess-btn").Node
+    correct_btn = dom.document.getElementById("correct-btn").Node
+  canvas = dom.document.getElementById("surface").Canvas
+  ctx = canvas.getContext2D()
 
-  echo "performance= ", performance
-  # dump("src/input_weights.nim", performance, "whi", nn.wih)
-  # dump("src/hidden_weights.nim", performance, "who", nn.who)
+  canvas_temp = dom.document.createElement("hidden").Canvas
+  ctx_temp = canvas.getContext2D()
+
+  canvas_temp.height = c_height
+  canvas_temp.width = c_width
+  canvas_temp.style.display = "none"
+
+  dom.window.addEventListener("resize", resize)
+  canvas.addEventListener("mousemove", draw)
+  canvas.addEventListener("touchmove", draw)
+  canvas.addEventListener("mousedown", down)
+  canvas.addEventListener("touchstart", down)
+  canvas.addEventListener("mouseup", up)
+  canvas.addEventListener("touchend", up)
+  canvas.addEventListener("mouseenter", setPosition)
+  clear_btn.addEventListener("click", clear)
+  guess_btn.addEventListener("click", guess)
+  correct_btn.addEventListener("click", correct)
+
+
+dom.window.onload = main

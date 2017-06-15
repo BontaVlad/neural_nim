@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Nim Canvas Test</title>
+    <script type="text/javascript" src="src/nimcache/main.js"></script>
+
+    <style type="text/css">
+     canvas {
+         border: 1px solid black;
+         margin: 0px;
+     }
+    </style>
+  </head>
+  <body>
+    <canvas id="surface" width="500" height="500"></canvas><br>
+    <button id="clear-btn" type="button">Clear canvas</button>
+    <button id="guess-btn" type="button">Guess!</button>
+    <button id="correct-btn" type="button">Correct Me!</button>
+    <input type="text" id="correct-input" name="usrname">
+    <h3>I think you drawn: <span id="sure"> --- </span></h3>
+    <h3>But it could be also: <span id="maybe"> --- </span></h3>
+  </body>
+</html>
+
