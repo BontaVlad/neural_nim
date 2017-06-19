@@ -20,14 +20,27 @@ var
   img_data: seq[cuint] = @[]
   nn = newNN(784, 200, 10, 0.01)
   lineWidth = 25
+  is_touch = false
 
 
 proc clear(e: Event) =
   ctx.clearRect(0, 0, canvas.width.float, canvas.height.float)
 
+
 proc setPosition(e: Event) =
-  pos.x = e.clientX
-  pos.y = e.clientY
+  if is_touch:
+    let ev = e.TouchEvent.targetTouches.item(0)
+    pos.x = ev.clientX
+    pos.y = ev.clientY
+    return
+  pos.x = e.offsetX
+  pos.y = e.offsetY
+
+
+# crappy hack because I can't differentiate between events and touchEvents
+proc setPositionTouch(e: Event) =
+  is_touch = true
+  setPosition(e)
 
 
 proc draw(e: Event) =
@@ -117,6 +130,8 @@ proc correct(e: Event) =
 proc resize(e: Event) =
   let
     size = dom.window.innerWidth - 30
+  if size > 500:
+    return
   canvas.width = size
   canvas.height = size
   if size < 400:
@@ -140,6 +155,7 @@ proc main(event: Event) =
   dom.window.addEventListener("resize", resize)
   canvas.addEventListener("mousemove", draw)
   canvas.addEventListener("touchmove", draw)
+  canvas.addEventListener("touchmove", setPositionTouch)
   canvas.addEventListener("mousedown", down)
   canvas.addEventListener("touchstart", down)
   canvas.addEventListener("mouseup", up)
